@@ -1,0 +1,7 @@
+project_id = "gchgcwotajxtykhapgpl"
+
+[functions.check-matches]
+verify_jwt = false
+
+[functions.check-wink-matches]
+verify_jwt = false
