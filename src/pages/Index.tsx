@@ -275,15 +275,25 @@ const Index: React.FC = () => {
   };
 
   const handleWinkSubmit = async (data: { timeOffset: number; radius: number; lat: number; lng: number }) => {
-    if (!user) return;
+    // 1. SECURITY CHECK: Ensure user exists
+    if (!user) {
+      toast({
+        title: "❌ Error",
+        description: "You must be logged in to wink!",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    console.log("🟣 Attempting to drop wink for User ID:", user.id);
 
     setCurrentLocation({ lat: data.lat, lng: data.lng });
     
-    // Save wink to database
+    // 2. DATABASE INSERT (With explicit Error Logging)
     const { data: newWinkData, error } = await supabase
       .from('winks')
       .insert({
-        user_id: user.id,
+        user_id: user.id, 
         lat: data.lat,
         lng: data.lng,
         radius: data.radius,
@@ -292,17 +302,18 @@ const Index: React.FC = () => {
       .select()
       .single();
 
+    // 3. ERROR TRAP
     if (error) {
-      console.error('Error saving wink:', error);
+      console.error('🔥 SUPABASE ERROR:', error);
       toast({
-        title: "Error dropping wink",
-        description: error.message,
+        title: "Database Error",
+        description: error.message || "Could not save wink",
         variant: "destructive",
       });
       return;
     }
 
-    // Add to local state
+    // 4. SUCCESS STATE
     const newWink: Wink = {
       id: newWinkData.id,
       lat: data.lat,
@@ -316,7 +327,7 @@ const Index: React.FC = () => {
     setShowWinkModal(false);
     setShowSuccess(true);
 
-    // Immediately check for matches
+    // 5. MATCH CHECKING (Keep existing logic)
     try {
       const { data: matchResult, error: matchError } = await supabase.functions.invoke('check-wink-matches', {
         body: { winkId: newWinkData.id, userId: user.id }
@@ -324,37 +335,14 @@ const Index: React.FC = () => {
 
       if (matchError) {
         console.error('Match check error:', matchError);
-      } else if (matchResult) {
-        console.log('Match check result:', matchResult);
-        
-        // Show debug info
-        if (matchResult.matches?.length > 0) {
+      } else if (matchResult?.matches?.length > 0) {
           toast({
             title: "🎉 Match Found!",
-            description: `You matched with ${matchResult.matches.length} person(s)! Distance: ${matchResult.matches[0].distance}m`,
+            description: `You matched with someone!`,
           });
-          
-          // Update wink to show it has a match
-          setWinks(prev => prev.map(w => 
-            w.id === newWinkData.id ? { ...w, hasMatch: true } : w
-          ));
-          
-          // Show mutual match notification
+          setWinks(prev => prev.map(w => w.id === newWinkData.id ? { ...w, hasMatch: true } : w));
           setShowSuccess(false);
           setShowMutualMatch(true);
-        } else {
-          // Show near matches debug info
-          const nearMatchInfo = matchResult.nearMatches?.length > 0 
-            ? `Near winks: ${matchResult.nearMatches.map((nm: any) => 
-                `${nm.distance}m (${nm.isWithinRadius ? '✓radius' : '✗radius'}, ${nm.isWithinTime ? '✓time' : '✗time'})`
-              ).join(', ')}`
-            : 'No nearby winks found';
-          
-          toast({
-            title: "No match yet",
-            description: `Active winks: ${matchResult.totalActiveWinks}. ${nearMatchInfo}`,
-          });
-        }
       }
     } catch (err) {
       console.error('Error checking matches:', err);
@@ -365,7 +353,8 @@ const Index: React.FC = () => {
       description: "We'll notify you if there's a match",
     });
   };
-
+    // Add to local state
+    
   const handleWinkClick = (wink: Wink) => {
     setSelectedWink(wink);
     setShowWinkDetail(true);
